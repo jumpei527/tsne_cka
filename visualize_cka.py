@@ -40,7 +40,7 @@ fig_tsne.add_trace(go.Scatter(
     hoverinfo='text'
 ))
 fig_tsne.update_layout(
-    title='t-SNEによるCKA行列の可視化結果',
+    title='t-SNEによるラベル付き可視化結果',
     xaxis=dict(
         zeroline=False,
         showline=True,
@@ -74,7 +74,7 @@ fig_umap.add_trace(go.Scatter(
     hoverinfo='text'
 ))
 fig_umap.update_layout(
-    title='UMAPによるCKA行列の可視化結果',
+    title='UMAPによるラベル付き可視化結果',
     xaxis=dict(
         zeroline=False,
         showline=True,
