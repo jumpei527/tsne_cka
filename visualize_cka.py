@@ -91,6 +91,26 @@ colorbar = dict(
     dtick=(max_improvement - min_improvement) / 10
 )
 
+# カラーマッピングの準備
+def get_color_values(improvements, max_improvement, min_improvement):
+    colors = []
+    for val in improvements:
+        if pd.isna(val):
+            colors.append('rgba(255, 255, 255, 1)')  # 白
+        elif val > 0:
+            opacity = min(val / max_improvement, 1)
+            colors.append(f'rgba(0, 0, 255, {opacity})')  # 青
+        elif val < 0:
+            opacity = min(-val / abs(min_improvement), 1)
+            colors.append(f'rgba(255, 0, 0, {opacity})')  # 赤
+        else:
+            colors.append('rgba(255, 255, 255, 1)')  # 白
+    return colors
+
+# 色の計算
+tsne_colors = get_color_values(tsne_df['Improvement'], max_improvement, min_improvement)
+umap_colors = get_color_values(umap_df['Improvement'], max_improvement, min_improvement)
+
 # t-SNEのプロットを作成
 fig_tsne = go.Figure()
 fig_tsne.add_trace(go.Scatter(
@@ -99,17 +119,14 @@ fig_tsne.add_trace(go.Scatter(
     mode='markers',
     marker=dict(
         size=10,
-        color=tsne_df['Color'],
-        colorscale=color_scale,
-        colorbar=colorbar,
-        cmin=min_improvement,
-        cmax=max_improvement,
-        showscale=True,
-        line=dict(width=1, color='black')  # マーカーの枠線を追加
+        color=tsne_colors,  # カスタム色を使用
+        showscale=False,    # デフォルトのカラースケールを無効化
+        line=dict(width=1, color='black')
     ),
-    text=tsne_df['Label'] + f" (Improvement: {tsne_df['Improvement']})",
+    text=tsne_df['Label'],
     hoverinfo='text'
 ))
+
 fig_tsne.update_layout(
     title='t-SNEによるクラスタリング付き可視化結果',
     xaxis=dict(
@@ -142,15 +159,11 @@ fig_umap.add_trace(go.Scatter(
     mode='markers',
     marker=dict(
         size=10,
-        color=umap_df['Color'],
-        colorscale=color_scale,
-        colorbar=colorbar,
-        cmin=min_improvement,
-        cmax=max_improvement,
-        showscale=True,
-        line=dict(width=1, color='black')  # マーカーの枠線を追加
+        color=umap_colors,  # カスタム色を使用
+        showscale=False,    # デフォルトのカラースケールを無効化
+        line=dict(width=1, color='black')
     ),
-    text=umap_df['Label'] + f" (Improvement: {umap_df['Improvement']})",
+    text=umap_df['Label'],
     hoverinfo='text'
 ))
 fig_umap.update_layout(
@@ -191,24 +204,10 @@ st.plotly_chart(fig_umap, use_container_width=True)
 # クラスタごとのモデル名と改善度を表示
 st.subheader('モデルごとの精度向上度')
 
-# モデルごとの精度向上度を表形式で表示
-st.write("以下は各モデルの精度向上度です。正の値は向上、負の値は低下を示します。")
-
 # 改善度データフレームの作成
+improvements_df = pd.read_csv('improvements.csv')
 improvement_display_df = improvements_df.copy()
 improvement_display_df = improvement_display_df.sort_values(by='Improvement', ascending=False)
 
-# スタイルを適用して色付け
-def color_improvement(val):
-    if pd.isna(val):
-        color = 'white'
-    elif val > 0:
-        color = f'rgba(0, 0, 255, {min(val / max_improvement, 1)})'  # 青色の透明度
-    elif val < 0:
-        color = f'rgba(255, 0, 0, {min(-val / abs(min_improvement), 1)})'  # 赤色の透明度
-    else:
-        color = 'white'
-    return f'background-color: {color}'
-
-styled_df = improvement_display_df.style.applymap(color_improvement, subset=['Improvement'])
-st.dataframe(styled_df, width=700, height=600)
+# 組み込みのスタイリング機能を使用して表示
+st.dataframe(improvement_display_df, width=700, height=600)
