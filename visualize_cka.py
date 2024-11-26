@@ -21,13 +21,19 @@ n_clusters_umap = st.sidebar.slider('UMAP クラスタ数 (K-Means)', min_value=
 # CSVファイルの読み込み
 @st.cache_data
 def load_data():
-    df = pd.read_csv('outputs/qa2/cka_matrix/cka_matrix.csv', header=None)
-    cka_matrix_np = df.values[1:, 1:].astype(float)  # データ部分（最初の行と列を削除）
-    labels = df.values[1:, 0]                      # ラベル（最初の列）
+    # CKAマトリックスの読み込み
+    cka_df = pd.read_csv('outputs/qa2/cka_matrix/cka_matrix.csv', header=None)
+    cka_matrix_np = cka_df.values[1:, 1:].astype(float)  # データ部分（最初の行と列を削除）
+    labels = cka_df.values[1:, 0]                      # ラベル（最初の列）
     labels = [label.replace('.csv', '') for label in labels]  # .csvを除外
-    return cka_matrix_np, labels
 
-cka_matrix_np, labels = load_data()
+    # 改善データの読み込み
+    improvements_df = pd.read_csv('improvements.csv')
+    improvements_dict = dict(zip(improvements_df['Model'], improvements_df['Improvement']))
+
+    return cka_matrix_np, labels, improvements_dict
+
+cka_matrix_np, labels, improvements_dict = load_data()
 
 # t-SNEによる次元削減（2次元）
 tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity, max_iter=1000)
@@ -55,10 +61,35 @@ umap_df = pd.DataFrame(transformed_data_umap, columns=['Dim 1', 'Dim 2'])
 umap_df['Label'] = labels  # ラベルを追加
 umap_df['Cluster'] = clusters_umap  # クラスタラベルを追加
 
-# カラーマップの作成 (手動で色を定義)
-color_map = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52']
-cluster_colors_tsne = [color_map[i % len(color_map)] for i in clusters_tsne]
-cluster_colors_umap = [color_map[i % len(color_map)] for i in clusters_umap]
+# 改善度をデータフレームに追加
+tsne_df['Improvement'] = tsne_df['Label'].map(improvements_dict)
+umap_df['Improvement'] = umap_df['Label'].map(improvements_dict)
+
+# カラーマッピングの準備
+# 正の改善度は青、負の改善度は赤、データがない場合は白
+# PlotlyのRdBu_rカラースケールを使用（反転して青が正、赤が負に）
+color_scale = 'RdBu_r'
+
+# カラーバリューを定義（NaNは0に設定して白に近づける）
+# 適切な範囲を設定するために、改善度の最大絶対値を取得
+max_improvement = max(tsne_df['Improvement'].max(), umap_df['Improvement'].max())
+min_improvement = min(tsne_df['Improvement'].min(), umap_df['Improvement'].min())
+
+# PlotlyではNaNは色で表現できないため、白色にするために改善度がNaNの場合は0に設定
+tsne_df['Improvement_plot'] = tsne_df['Improvement'].fillna(0)
+umap_df['Improvement_plot'] = umap_df['Improvement'].fillna(0)
+
+# マーカーの色を改善度に基づいて設定
+tsne_df['Color'] = tsne_df['Improvement_plot']
+umap_df['Color'] = umap_df['Improvement_plot']
+
+# カラーバーの設定
+colorbar = dict(
+    title="Improvement",
+    tickmode='linear',
+    tick0=min_improvement,
+    dtick=(max_improvement - min_improvement) / 10
+)
 
 # t-SNEのプロットを作成
 fig_tsne = go.Figure()
@@ -68,10 +99,15 @@ fig_tsne.add_trace(go.Scatter(
     mode='markers',
     marker=dict(
         size=10,
-        color=cluster_colors_tsne,  # クラスタラベルで色分け
-        showscale=False
+        color=tsne_df['Color'],
+        colorscale=color_scale,
+        colorbar=colorbar,
+        cmin=min_improvement,
+        cmax=max_improvement,
+        showscale=True,
+        line=dict(width=1, color='black')  # マーカーの枠線を追加
     ),
-    text=tsne_df['Label'],
+    text=tsne_df['Label'] + f" (Improvement: {tsne_df['Improvement']})",
     hoverinfo='text'
 ))
 fig_tsne.update_layout(
@@ -93,7 +129,7 @@ fig_tsne.update_layout(
         automargin=True
     ),
     plot_bgcolor='white',
-    width=600,
+    width=800,
     height=600,
     margin=dict(l=50, r=50, b=50, t=50)
 )
@@ -106,10 +142,15 @@ fig_umap.add_trace(go.Scatter(
     mode='markers',
     marker=dict(
         size=10,
-        color=cluster_colors_umap,  # クラスタラベルで色分け
-        showscale=False
+        color=umap_df['Color'],
+        colorscale=color_scale,
+        colorbar=colorbar,
+        cmin=min_improvement,
+        cmax=max_improvement,
+        showscale=True,
+        line=dict(width=1, color='black')  # マーカーの枠線を追加
     ),
-    text=umap_df['Label'],
+    text=umap_df['Label'] + f" (Improvement: {umap_df['Improvement']})",
     hoverinfo='text'
 ))
 fig_umap.update_layout(
@@ -131,7 +172,7 @@ fig_umap.update_layout(
         automargin=True
     ),
     plot_bgcolor='white',
-    width=600,
+    width=800,
     height=600,
     margin=dict(l=50, r=50, b=50, t=50)
 )
@@ -143,20 +184,31 @@ st.title('CKA行列の可視化')
 st.subheader('t-SNE 可視化')
 st.plotly_chart(fig_tsne, use_container_width=True)
 
-# t-SNEクラスタごとのモデル名を表示
-st.subheader('t-SNE クラスタごとのモデル名')
-for cluster_num in range(n_clusters_tsne):
-    st.markdown(f'<span style="color:{color_map[cluster_num % len(color_map)]};">**クラスタ {cluster_num + 1}:**</span>', unsafe_allow_html=True)
-    for label in tsne_df[tsne_df['Cluster'] == cluster_num]['Label']:
-        st.markdown(f'<span style="color:{color_map[cluster_num % len(color_map)]};">{label}</span>', unsafe_allow_html=True)
-
 # UMAPのグラフを表示
 st.subheader('UMAP 可視化')
 st.plotly_chart(fig_umap, use_container_width=True)
 
-# UMAPクラスタごとのモデル名を表示
-st.subheader('UMAP クラスタごとのモデル名')
-for cluster_num in range(n_clusters_umap):
-    st.markdown(f'<span style="color:{color_map[cluster_num % len(color_map)]};">**クラスタ {cluster_num + 1}:**</span>', unsafe_allow_html=True)
-    for label in umap_df[umap_df['Cluster'] == cluster_num]['Label']:
-        st.markdown(f'<span style="color:{color_map[cluster_num % len(color_map)]};">{label}</span>', unsafe_allow_html=True)
+# クラスタごとのモデル名と改善度を表示
+st.subheader('モデルごとの精度向上度')
+
+# モデルごとの精度向上度を表形式で表示
+st.write("以下は各モデルの精度向上度です。正の値は向上、負の値は低下を示します。")
+
+# 改善度データフレームの作成
+improvement_display_df = improvements_df.copy()
+improvement_display_df = improvement_display_df.sort_values(by='Improvement', ascending=False)
+
+# スタイルを適用して色付け
+def color_improvement(val):
+    if pd.isna(val):
+        color = 'white'
+    elif val > 0:
+        color = f'rgba(0, 0, 255, {min(val / max_improvement, 1)})'  # 青色の透明度
+    elif val < 0:
+        color = f'rgba(255, 0, 0, {min(-val / abs(min_improvement), 1)})'  # 赤色の透明度
+    else:
+        color = 'white'
+    return f'background-color: {color}'
+
+styled_df = improvement_display_df.style.applymap(color_improvement, subset=['Improvement'])
+st.dataframe(styled_df, width=700, height=600)
