@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from sklearn.manifold import TSNE
 from umap import UMAP
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import LabelEncoder
 import numpy as np
 
 # サイドバーでパラメータを選択
@@ -44,15 +45,20 @@ def load_data():
         improvements_after_dict = {label: 0 for label in labels}
 
     return cka_matrix_np, labels, improvements_before_dict, improvements_after_dict
+
 cka_matrix_np, labels, improvements_before_dict, improvements_after_dict = load_data()
+
+# ラベルのエンコード
+label_encoder = LabelEncoder()
+encoded_labels = label_encoder.fit_transform(labels)
 
 # t-SNEによる次元削減（2次元）
 tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity, max_iter=1000)
 transformed_data_tsne = tsne.fit_transform(cka_matrix_np)
 
-# UMAPによる次元削減（2次元）
-umap_model = UMAP(n_components=2, random_state=42)
-transformed_data_umap = umap_model.fit_transform(cka_matrix_np)
+# 教師ありUMAPによる次元削減（2次元）
+umap_model = UMAP(n_components=2, n_neighbors=15, random_state=42)
+transformed_data_umap = umap_model.fit_transform(cka_matrix_np, y=encoded_labels)
 
 # t-SNEのクラスタリング
 kmeans_tsne = KMeans(n_clusters=n_clusters_tsne, random_state=42)
@@ -106,6 +112,7 @@ def get_color_values(improvements, max_improvement, min_improvement):
                 r, g, b = 1, 1 - 4 * (normalized - 0.75), 0
             colors.append(f'rgba({int(r*255)}, {int(g*255)}, {int(b*255)}, 0.8)')
     return colors
+
 # ファインチューニング前の色を計算
 tsne_colors_before = get_color_values(tsne_df['Improvement_Before'], max_improvement, min_improvement)
 umap_colors_before = get_color_values(umap_df['Improvement_Before'], max_improvement, min_improvement)
@@ -219,16 +226,15 @@ st.plotly_chart(fig_umap_before, use_container_width=True)
 st.subheader('UMAP 可視化（ファインチューニング後）')
 st.plotly_chart(fig_umap_after, use_container_width=True)
 
-
 # ... existing code ...
 
 # t-SNEによる次元削減（3次元）
 tsne_3d = TSNE(n_components=3, random_state=42, perplexity=perplexity, max_iter=1000)
 transformed_data_tsne_3d = tsne_3d.fit_transform(cka_matrix_np)
 
-# UMAPによる次元削減（3次元）
-umap_model_3d = UMAP(n_components=3, random_state=42)
-transformed_data_umap_3d = umap_model_3d.fit_transform(cka_matrix_np)
+# 教師ありUMAPによる次元削減（3次元）
+umap_model_3d = UMAP(n_components=3, n_neighbors=15, random_state=42)
+transformed_data_umap_3d = umap_model_3d.fit_transform(cka_matrix_np, y=encoded_labels)
 
 # 3次元データフレームの作成
 tsne_df_3d = pd.DataFrame(transformed_data_tsne_3d, columns=['Dim 1', 'Dim 2', 'Dim 3'])
